@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Librarian Panel</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f5f5f5;
+    }
+    header {
+      background: #1e293b;
+      color: white;
+      padding: 12px 20px;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 20px;
+    }
+    main {
+      padding: 20px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      margin-bottom: 16px;
+    }
+    .card h2 {
+      margin-top: 0;
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+    .stat {
+      font-size: 28px;
+      font-weight: 600;
+    }
+    label {
+      display: block;
+      margin: 6px 0 2px;
+      font-size: 13px;
+    }
+    input, button, select {
+      font-family: inherit;
+      font-size: 14px;
+    }
+    input[type="text"], select {
+      width: 100%;
+      padding: 6px 8px;
+      border-radius: 4px;
+      border: 1px solid #cbd5e1;
+      box-sizing: border-box;
+    }
+    button {
+      border-radius: 4px;
+      border: none;
+      padding: 6px 10px;
+      cursor: pointer;
+      margin-top: 8px;
+      background: #2563eb;
+      color: white;
+    }
+    button.secondary {
+      background: #64748b;
+    }
+    button.danger {
+      background: #dc2626;
+    }
+    button + button {
+      margin-left: 8px;
+    }
+    .tag-pill {
+      display: inline-block;
+      background: #e0f2fe;
+      color: #0f172a;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+    }
+    .book-list {
+      list-style: none;
+      padding: 0;
+      margin: 8px 0 0;
+      max-height: 220px;
+      overflow: auto;
+    }
+    .book-list li {
+      padding: 4px 0;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 14px;
+    }
+    .book-list small {
+      color: #6b7280;
+    }
+    .status {
+      font-size: 13px;
+      color: #64748b;
+      margin-top: 6px;
+      min-height: 18px;
+    }
+    .status span.ok {
+      color: #16a34a;
+    }
+    .status span.error {
+      color: #dc2626;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Librarian Panel</h1>
+  </header>
+
+  <main>
+    <!-- Top stats & motor -->
+    <section class="grid">
+      <div class="card">
+        <h2>Library Stats</h2>
+        <div>Total Books</div>
+        <div id="stat-total-books" class="stat">–</div>
+        <div>Total Users</div>
+        <div id="stat-total-users" class="stat">–</div>
+        <div class="status" id="stats-status"></div>
+      </div>
+
+      <div class="card">
+        <h2>Motor Control</h2>
+        <p>Send simple commands to the shelf scanner motor.</p>
+        <div>
+          <button onclick="moveMotor(4096)">Rotate +1 rev</button>
+          <button onclick="moveMotor(-4096)" class="secondary">Rotate -1 rev</button>
+          <button onclick="stopMotor()" class="danger">Stop</button>
+        </div>
+        <label for="custom-steps">Custom steps</label>
+        <input type="text" id="custom-steps" placeholder="e.g. 1000" />
+        <button onclick="moveCustomSteps()">Move custom</button>
+        <div class="status" id="motor-status"></div>
+      </div>
+    </section>
+
+    <!-- Add book & Shelf scan -->
+    <section class="grid">
+      <div class="card">
+        <h2>Add Book via Check-in RFID</h2>
+        <p>Scan a tag on the fixed (non-moving) reader. It will appear here.</p>
+
+        <p>
+          Latest tag:
+          <span id="latest-tag" class="tag-pill">None</span>
+        </p>
+        <div class="status" id="latest-tag-status"></div>
+
+        <form id="add-book-form">
+          <label for="book-title">Title</label>
+          <input type="text" id="book-title" required />
+
+          <label for="book-author">Author</label>
+          <input type="text" id="book-author" required />
+
+          <button type="submit">Add Book</button>
+        </form>
+        <div class="status" id="add-book-status"></div>
+      </div>
+
+      <div class="card">
+        <h2>Shelf Scan</h2>
+        <p>Use the moving RFID to scan the shelf. Tags seen in the last full scan are listed below.</p>
+        <div>
+          <button onclick="startShelfScan()">Start Shelf Scan</button>
+          <button onclick="endShelfScan()" class="secondary">End Shelf Scan</button>
+          <button onclick="refreshLastScan()" class="secondary">Refresh Last Scan</button>
+        </div>
+        <div class="status" id="scan-status"></div>
+
+        <h3>Books from last scan</h3>
+        <ul id="scan-books" class="book-list"></ul>
+      </div>
+    </section>
+
+    <!-- Borrow / Return -->
+    <section class="card">
+      <h2>Borrow / Return</h2>
+
+      <h3>Borrow a Book</h3>
+      <form id="borrow-form">
+        <label for="borrow-user">User</label>
+        <select id="borrow-user">
+          <option value="">Loading users...</option>
+        </select>
+
+        <label for="borrow-book">Book</label>
+        <select id="borrow-book">
+          <option value="">Loading books...</option>
+        </select>
+
+        <button type="submit">Borrow</button>
+      </form>
+      <div class="status" id="borrow-status"></div>
+
+      <h3 style="margin-top: 16px;">Active Loans</h3>
+      <ul id="active-loans" class="book-list"></ul>
+      <div class="status" id="loans-status"></div>
+    </section>
+  </main>
+
+  <script>
+    // ===== Helper for JSON requests =====
+    async function jsonFetch(url, options = {}) {
+      const res = await fetch(url, {
+        headers: { "Content-Type": "application/json" },
+        credentials: "include", // send cookies/session
+        ...options,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = data.error || ("HTTP " + res.status);
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    // ===== Stats =====
+    async function loadStats() {
+      const statusEl = document.getElementById("stats-status");
+      try {
+        const data = await jsonFetch("/admin/stats");
+        document.getElementById("stat-total-books").textContent = data.totalBooks ?? 0;
+        document.getElementById("stat-total-users").textContent = data.totalUsers ?? 0;
+        statusEl.innerHTML = '<span class="ok">Stats up to date</span>';
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Failed to load stats</span>';
+      }
+    }
+
+    // ===== Latest check-in tag =====
+    let lastShownTag = null;
+
+    async function pollLatestTag() {
+      const tagEl = document.getElementById("latest-tag");
+      const statusEl = document.getElementById("latest-tag-status");
+      try {
+        const data = await jsonFetch("/admin/latest-checkin-tag");
+        const tag = data.tag || null;
+        if (tag) {
+          tagEl.textContent = tag;
+          if (tag !== lastShownTag) {
+            statusEl.innerHTML = '<span class="ok">New tag scanned</span>';
+            lastShownTag = tag;
+          }
+        } else {
+          tagEl.textContent = "None";
+        }
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Failed to load latest tag</span>';
+      }
+    }
+
+    // ===== Add book form =====
+    document.getElementById("add-book-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const statusEl = document.getElementById("add-book-status");
+      const tagEl = document.getElementById("latest-tag");
+      const tag = (tagEl.textContent || "").trim();
+      const title = document.getElementById("book-title").value.trim();
+      const author = document.getElementById("book-author").value.trim();
+
+      if (!tag || tag === "None") {
+        statusEl.innerHTML = '<span class="error">No tag scanned yet</span>';
+        return;
+      }
+      if (!title || !author) {
+        statusEl.innerHTML = '<span class="error">Please enter title and author</span>';
+        return;
+      }
+
+      try {
+        const book = await jsonFetch("/admin/books", {
+          method: "POST",
+          body: JSON.stringify({ tag, title, author }),
+        });
+        statusEl.innerHTML =
+          '<span class="ok">Book added: ' +
+          (book.title || title) +
+          "</span>";
+        document.getElementById("book-title").value = "";
+        document.getElementById("book-author").value = "";
+        loadStats(); // refresh book count
+        loadBooks(); // refresh book dropdown
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Failed to add book</span>';
+      }
+    });
+
+    // ===== Shelf scan =====
+    async function startShelfScan() {
+      const statusEl = document.getElementById("scan-status");
+      try {
+        await jsonFetch("/admin/start-shelf-scan", { method: "POST" });
+        statusEl.innerHTML = '<span class="ok">Scan started</span>';
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Failed to start scan</span>';
+      }
+    }
+
+    async function endShelfScan() {
+      const statusEl = document.getElementById("scan-status");
+      try {
+        await jsonFetch("/admin/end-shelf-scan", { method: "POST" });
+        statusEl.innerHTML = '<span class="ok">Scan ended</span>';
+        refreshLastScan();
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Failed to end scan</span>';
+      }
+    }
+
+    async function refreshLastScan() {
+      const statusEl = document.getElementById("scan-status");
+      const listEl = document.getElementById("scan-books");
+      listEl.innerHTML = "";
+      try {
+        const data = await jsonFetch("/admin/last-shelf-scan");
+        const books = data.books || [];
+        if (!books.length) {
+          listEl.innerHTML = "<li>No books in last scan</li>";
+        } else {
+          books.forEach((b) => {
+            const li = document.createElement("li");
+            li.innerHTML =
+              "<strong>" +
+              (b.title || "Untitled") +
+              "</strong> — " +
+              (b.author || "Unknown") +
+              ' <small>(' +
+              (b.rfid_tag || "no tag") +
+              ")</small>";
+            listEl.appendChild(li);
+          });
+        }
+        statusEl.innerHTML = '<span class="ok">Last scan loaded</span>';
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Failed to load last scan</span>';
+        listEl.innerHTML = "<li>Error loading scan</li>";
+      }
+    }
+
+    // ===== Motor control =====
+    async function moveMotor(steps) {
+      const statusEl = document.getElementById("motor-status");
+      try {
+        await jsonFetch("/admin/motor/move", {
+          method: "POST",
+          body: JSON.stringify({ steps }),
+        });
+        statusEl.innerHTML =
+          '<span class="ok">Move command sent: ' + steps + " steps</span>";
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Failed to send move</span>';
+      }
+    }
+
+    async function stopMotor() {
+      const statusEl = document.getElementById("motor-status");
+      try {
+        await jsonFetch("/admin/motor/stop", { method: "POST" });
+        statusEl.innerHTML = '<span class="ok">Stop command sent</span>';
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Failed to send stop</span>';
+      }
+    }
+
+    function moveCustomSteps() {
+      const input = document.getElementById("custom-steps");
+      const value = parseInt(input.value, 10);
+      if (isNaN(value) || value === 0) {
+        document.getElementById("motor-status").innerHTML =
+          '<span class="error">Enter a non-zero number</span>';
+        return;
+      }
+      moveMotor(value);
+    }
+
+    // ===== Users & Books for Borrow =====
+    async function loadUsers() {
+      const select = document.getElementById("borrow-user");
+      const statusEl = document.getElementById("borrow-status");
+      try {
+        const users = await jsonFetch("/admin/users");
+        select.innerHTML = '<option value="">Select user</option>';
+        users.forEach((u) => {
+          const opt = document.createElement("option");
+          opt.value = u.id;
+          opt.textContent = `${u.name} (${u.role})`;
+          select.appendChild(opt);
+        });
+        statusEl.innerHTML = "";
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Failed to load users</span>';
+      }
+    }
+
+    async function loadBooks() {
+      const select = document.getElementById("borrow-book");
+      const statusEl = document.getElementById("borrow-status");
+      try {
+        const books = await jsonFetch("/admin/books");
+        select.innerHTML = '<option value="">Select book</option>';
+        books.forEach((b) => {
+          const opt = document.createElement("option");
+          opt.value = b.id;
+          opt.textContent = `${b.title || "Untitled"} — ${b.author || "Unknown"}`;
+          select.appendChild(opt);
+        });
+        statusEl.innerHTML = "";
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Failed to load books</span>';
+      }
+    }
+
+    // ===== Loans (Active + Return) =====
+    async function loadLoans() {
+      const listEl = document.getElementById("active-loans");
+      const statusEl = document.getElementById("loans-status");
+      listEl.innerHTML = "";
+      try {
+        const loans = await jsonFetch("/admin/loans");
+        const active = loans.filter((l) => !l.returnedAt);
+
+        if (!active.length) {
+          listEl.innerHTML = "<li>No active loans</li>";
+        } else {
+          active.forEach((l) => {
+            const li = document.createElement("li");
+            li.innerHTML =
+              "<strong>" +
+              (l.bookTitle || "Untitled") +
+              "</strong> — " +
+              (l.bookAuthor || "Unknown") +
+              " <small>(" +
+              (l.rfid_tag || "no tag") +
+              ")</small>" +
+              " <br /><small>Borrowed by: " +
+              (l.userName || "Unknown") +
+              " at " +
+              l.borrowedAt +
+              "</small> " +
+              `<button onclick="returnLoan(${l.id})" class="secondary">Return</button>`;
+            listEl.appendChild(li);
+          });
+        }
+
+        statusEl.innerHTML = '<span class="ok">Loans loaded</span>';
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Failed to load loans</span>';
+        listEl.innerHTML = "<li>Error loading loans</li>";
+      }
+    }
+
+    async function returnLoan(loanId) {
+      const statusEl = document.getElementById("loans-status");
+      try {
+        await jsonFetch("/admin/return", {
+          method: "POST",
+          body: JSON.stringify({ loanId }),
+        });
+        statusEl.innerHTML = '<span class="ok">Book returned</span>';
+        loadLoans();
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Failed to return book</span>';
+      }
+    }
+
+    // Make returnLoan visible to inline onclick
+    window.returnLoan = returnLoan;
+
+    // Borrow form submit
+    document.getElementById("borrow-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const statusEl = document.getElementById("borrow-status");
+      const userId = document.getElementById("borrow-user").value;
+      const bookId = document.getElementById("borrow-book").value;
+
+      if (!userId || !bookId) {
+        statusEl.innerHTML = '<span class="error">Select user and book</span>';
+        return;
+      }
+
+      try {
+        await jsonFetch("/admin/borrow", {
+          method: "POST",
+          body: JSON.stringify({ userId, bookId }),
+        });
+        statusEl.innerHTML = '<span class="ok">Book borrowed</span>';
+        loadLoans();
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">' + err.message + "</span>";
+      }
+    });
+
+    // ===== Initial load & polling =====
+    loadStats();
+    refreshLastScan();
+    pollLatestTag();
+    loadUsers();
+    loadBooks();
+    loadLoans();
+
+    setInterval(pollLatestTag, 2000);  // check for new tag every 2s
+    setInterval(loadStats, 10000);     // refresh stats every 10s
+    setInterval(loadLoans, 15000);     // refresh loans every 15s
+  </script>
+</body>
+</html>
