@@ -150,6 +150,16 @@
       </div>
     </section>
 
+    <section class="card">
+      <h2>View Records</h2>
+      <button onclick="listUsers()">Show All Students</button>
+      <button onclick="listBooks()">Show All Books</button>
+      <button onclick="listBorrowed()">Show Borrowed Books</button>
+      <hr>
+      <div id="results" style="max-height:230px; overflow:auto; margin-top:10px;"></div>
+    </section>
+
+
     <!-- Add book & Shelf scan -->
     <section class="grid">
       <div class="card">
@@ -520,6 +530,57 @@
         statusEl.innerHTML = '<span class="error">' + err.message + "</span>";
       }
     });
+    
+        // ===== Show All Students =====
+    async function listUsers() {
+      const box = document.getElementById("results");
+      box.innerHTML = "Loading...";
+      try {
+        const users = await jsonFetch("/admin/users");
+        if (!users.length) return (box.innerHTML = "No users found");
+        box.innerHTML =
+          "<h3>All Students</h3>" +
+          users.map(u => `<p>${u.name} (${u.email}) — ${u.role}</p>`).join("");
+      } catch (err) {
+        box.innerHTML = "Error loading users";
+      }
+    }
+
+    // ===== Show All Books =====
+    async function listBooks() {
+      const box = document.getElementById("results");
+      box.innerHTML = "Loading...";
+      try {
+        const books = await jsonFetch("/admin/books");
+        if (!books.length) return (box.innerHTML = "No books found");
+        box.innerHTML =
+          "<h3>All Books</h3>" +
+          books.map(b => `<p>${b.title} — ${b.author} <small>(Tag: ${b.rfid_tag})</small></p>`).join("");
+      } catch (err) {
+        box.innerHTML = "Error loading books";
+      }
+    }
+
+    // ===== Show Active Borrowed Books =====
+    async function listBorrowed() {
+      const box = document.getElementById("results");
+      box.innerHTML = "Loading...";
+      try {
+        const loans = await jsonFetch("/admin/loans");
+        const active = loans.filter(l => !l.returnedAt);
+        if (!active.length) return (box.innerHTML = "No active loans");
+        box.innerHTML =
+          "<h3>Borrowed Books</h3>" +
+          active.map(l =>
+            `<p><strong>${l.bookTitle}</strong> → ${l.userName} <br>
+            <small>Borrowed at: ${new Date(l.borrowedAt).toLocaleString()}</small></p>`
+          ).join("");
+      } catch (err) {
+        box.innerHTML = "Error loading borrowed books";
+      }
+    }
+        
+
 
     // ===== Initial load & polling =====
     loadStats();
